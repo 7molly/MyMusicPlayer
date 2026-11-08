@@ -173,7 +173,9 @@ final class PlayerSheetState: ObservableObject {
 struct FullScreenPlayerView: View {
     @ObservedObject var playerVM = PlayerViewModel.shared
     @ObservedObject var sheetState = PlayerSheetState.shared
+    @ObservedObject private var coverManager = AnimatedCoverManager.shared
     @EnvironmentObject private var libraryStore: LibraryStore
+    @Environment(\.scenePhase) private var scenePhase
 
     var onClose: () -> Void
 
@@ -213,20 +215,34 @@ struct FullScreenPlayerView: View {
         let isPausedInFull = !playerVM.isPlaying && t > 0.95
         let playPauseScale: CGFloat = isPausedInFull ? 0.86 : 1.0
 
+        let animatedCoverURL = playerVM.currentTrack?.resolvedAnimatedCoverURL(in: libraryStore)
+        let showVideo = (t >= 0.99 && !sheetState.isAnimating && animatedCoverURL != nil && coverManager.canPlayAnimation)
+
         ZStack(alignment: .topLeading) {
             // 1. Верхний захватчик (pill/capsule 36×5 pt)
             grabberCapsule(layout: layout)
                 .opacity(controlsOpacity)
 
             // 2. Обложка лежит ВНУТРИ карточки и едет вместе с ней (единый слой, без рассинхрона)
-            ArtworkView(
-                data: playerVM.currentTrack?.resolvedArtworkData(in: libraryStore),
-                cornerRadius: artworkCornerRadius,
-                targetPixelSize: 800,
-                placeholderBackground: Color(white: 0.18),
-                placeholderSymbolColor: Color.white.opacity(0.60)
-            )
-            .id(playerVM.currentTrack?.id)
+            ZStack {
+                ArtworkView(
+                    data: playerVM.currentTrack?.resolvedArtworkData(in: libraryStore),
+                    cornerRadius: artworkCornerRadius,
+                    targetPixelSize: 800,
+                    placeholderBackground: Color(white: 0.18),
+                    placeholderSymbolColor: Color.white.opacity(0.60)
+                )
+                .id(playerVM.currentTrack?.id)
+
+                if showVideo, let url = animatedCoverURL {
+                    AnimatedCoverPlayerView(
+                        url: url,
+                        cornerRadius: artworkCornerRadius,
+                        isPlaying: playerVM.isPlaying
+                    )
+                    .transition(.opacity)
+                }
+            }
             .frame(width: currentArtworkFrame.width, height: currentArtworkFrame.height)
             .scaleEffect(playPauseScale)
             .animation(.spring(response: 0.42, dampingFraction: 0.88), value: playerVM.isPlaying)
@@ -348,7 +364,17 @@ struct FullScreenPlayerView: View {
             SpeedAndPitchSheet()
         }
         .onDisappear {
-            // Резервный сброс состояния
+            AnimatedCoverPlaybackCoordinator.shared.stopAndRelease()
+        }
+        .onChange(of: scenePhase) { phase in
+            if phase != .active {
+                AnimatedCoverPlaybackCoordinator.shared.stopAndRelease()
+            }
+        }
+        .onChange(of: sheetState.expansion) { exp in
+            if exp < 0.95 {
+                AnimatedCoverPlaybackCoordinator.shared.stopAndRelease()
+            }
         }
     }
 

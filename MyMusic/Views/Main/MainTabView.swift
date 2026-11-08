@@ -53,12 +53,14 @@ struct MainTabView: View {
 
                 // Нижний блок: Мини-плеер + плавающая «Нижняя панелька»
                 VStack(spacing: 8) {
-                    if playerVM.currentTrack != nil {
+                    if let track = playerVM.currentTrack {
                         MiniPlayerView(
+                            track: track,
                             onTap: {
                                 sheetState.animate(to: 1.0)
                             }
                         )
+                        .id(track.id)
                     }
 
                     CustomFloatingTabBar(selectedTab: $selectedTab)

@@ -2,6 +2,7 @@ import SwiftUI
 
 /// Компактный мини-плеер, закреплённый над нижним TabBar в стиле Apple Music
 struct MiniPlayerView: View {
+    let track: Track
     @ObservedObject var playerVM = PlayerViewModel.shared
     @ObservedObject var sheetState = PlayerSheetState.shared
     @ObservedObject private var themeManager = ThemeManager.shared
@@ -10,37 +11,36 @@ struct MiniPlayerView: View {
     var onTap: () -> Void
 
     var body: some View {
-        if let track = playerVM.currentTrack {
-            let t = sheetState.expansion
-            // Мини-плеер плавно исчезает за первые 35% движения
-            let miniBgOpacity = min(max((0.35 - t) / 0.35, 0.0), 1.0)
-            let textOpacity = min(max((0.30 - t) / 0.30, 0.0), 1.0)
+        let t = sheetState.expansion
+        // Мини-плеер плавно исчезает за первые 35% движения
+        let miniBgOpacity = min(max((0.35 - t) / 0.35, 0.0), 1.0)
+        let textOpacity = min(max((0.30 - t) / 0.30, 0.0), 1.0)
 
-            HStack(spacing: 12) {
-                // Миниатюра в мини-плеере видна ТОЛЬКО при t == 0, в первом же кадре анимации скрывается
-                ArtworkView(
-                    data: track.resolvedArtworkData(in: libraryStore),
-                    cornerRadius: 6,
-                    targetPixelSize: 120
-                )
-                .id(track.id)
-                .frame(width: 44, height: 44)
-                .opacity(t == 0.0 ? 1.0 : 0.0)
+        HStack(spacing: 12) {
+            // Миниатюра в мини-плеере видна ТОЛЬКО при t == 0, в первом же кадре анимации скрывается
+            ArtworkView(
+                data: track.resolvedArtworkData(in: libraryStore),
+                cornerRadius: 6,
+                targetPixelSize: 120
+            )
+            .id(track.id)
+            .frame(width: 44, height: 44)
+            .opacity(t == 0.0 ? 1.0 : 0.0)
 
-                // Название и исполнитель: гаснут за первые 30% анимации
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(track.title)
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
+            // Название и исполнитель: гаснут за первые 30% анимации
+            VStack(alignment: .leading, spacing: 2) {
+                Text(track.title)
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
 
-                    Text(track.artist)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-                .opacity(textOpacity)
+                Text(track.artist)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            .opacity(textOpacity)
 
                 Spacer(minLength: 8)
 
@@ -99,6 +99,5 @@ struct MiniPlayerView: View {
                     }
             )
             .padding(.horizontal, 10)
-        }
     }
 }

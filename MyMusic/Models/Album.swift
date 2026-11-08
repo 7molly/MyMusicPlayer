@@ -8,19 +8,34 @@ struct Album: Identifiable, Codable, Equatable, Hashable {
     var artworkData: Data? = nil
     var dateAdded: Date = Date()
     var tracks: [Track] = []
+    /// Относительное имя файла анимированной обложки в Documents/Covers (например: "uuid.mp4")
+    var animatedCoverFileName: String? = nil
 
     init(id: UUID = UUID(),
          title: String,
          artist: String = "Неизвестный исполнитель",
          artworkData: Data? = nil,
          dateAdded: Date = Date(),
-         tracks: [Track] = []) {
+         tracks: [Track] = [],
+         animatedCoverFileName: String? = nil) {
         self.id = id
         self.title = title
         self.artist = artist
         self.artworkData = artworkData
         self.dateAdded = dateAdded
         self.tracks = tracks
+        self.animatedCoverFileName = animatedCoverFileName
+    }
+
+    /// Разрешение абсолютного URL анимированной обложки альбома
+    var resolvedAnimatedCoverURL: URL? {
+        if let fileName = animatedCoverFileName, !fileName.isEmpty {
+            let url = AnimatedCoverManager.shared.coversDirectory.appendingPathComponent(fileName)
+            if FileManager.default.fileExists(atPath: url.path) {
+                return url
+            }
+        }
+        return nil
     }
 
     /// Обложка альбома: собственная или первая доступная из треков

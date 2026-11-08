@@ -16,6 +16,8 @@ struct Track: Identifiable, Codable, Equatable, Hashable {
     var trackNumber: Int = 1
     var artworkData: Data? = nil
     var dateAdded: Date = Date()
+    /// Относительное имя файла анимированной обложки в Documents/Covers (например: "uuid.mp4")
+    var animatedCoverFileName: String? = nil
 
     // Исходные метаданные файла (для кнопки «Вернуть исходные данные»)
     var originalTitle: String? = nil
@@ -35,6 +37,7 @@ struct Track: Identifiable, Codable, Equatable, Hashable {
          trackNumber: Int = 1,
          artworkData: Data? = nil,
          dateAdded: Date = Date(),
+         animatedCoverFileName: String? = nil,
          originalTitle: String? = nil,
          originalArtist: String? = nil,
          originalAlbumName: String? = nil,
@@ -51,11 +54,30 @@ struct Track: Identifiable, Codable, Equatable, Hashable {
         self.trackNumber = trackNumber
         self.artworkData = artworkData
         self.dateAdded = dateAdded
+        self.animatedCoverFileName = animatedCoverFileName
         self.originalTitle = originalTitle ?? title
         self.originalArtist = originalArtist ?? artist
         self.originalAlbumName = originalAlbumName ?? albumName
         self.originalTrackNumber = originalTrackNumber ?? trackNumber
         self.originalArtworkData = originalArtworkData ?? artworkData
+    }
+
+    /// Разрешение абсолютного URL анимированной обложки (с фолбэком на обложку альбома)
+    func resolvedAnimatedCoverURL(in libraryStore: LibraryStore? = nil) -> URL? {
+        if let fileName = animatedCoverFileName, !fileName.isEmpty {
+            let url = AnimatedCoverManager.shared.coversDirectory.appendingPathComponent(fileName)
+            if FileManager.default.fileExists(atPath: url.path) {
+                return url
+            }
+        }
+        let store = libraryStore ?? LibraryStore.shared
+        if let album = store.album(for: self), let albumCover = album.animatedCoverFileName, !albumCover.isEmpty {
+            let url = AnimatedCoverManager.shared.coversDirectory.appendingPathComponent(albumCover)
+            if FileManager.default.fileExists(atPath: url.path) {
+                return url
+            }
+        }
+        return nil
     }
 
     /// Обложка трека с фолбэком на обложку альбома

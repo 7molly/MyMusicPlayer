@@ -14,6 +14,15 @@ struct EditAlbumView: View {
     @State private var applyToTracks: Bool = true
     @State private var selectedPhotoItem: PhotosPickerItem? = nil
 
+    // Анимированная обложка
+    @State private var animatedCoverFileName: String? = nil
+    @State private var applyAnimatedCoverToTracks: Bool = true
+    @State private var selectedVideoItem: PhotosPickerItem? = nil
+    @State private var showFileImporter: Bool = false
+    @State private var isProcessingVideo: Bool = false
+    @State private var videoProcessProgress: Double = 0.0
+    @State private var videoProcessError: String? = nil
+
     var isTitleValid: Bool {
         !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
@@ -23,6 +32,7 @@ struct EditAlbumView: View {
         _title = State(initialValue: album.title)
         _artist = State(initialValue: album.artist)
         _artworkData = State(initialValue: album.artworkData)
+        _animatedCoverFileName = State(initialValue: album.animatedCoverFileName)
     }
 
     var body: some View {
@@ -93,6 +103,98 @@ struct EditAlbumView: View {
                     Text("Обложка альбома")
                 }
 
+                // MARK: - Анимированная обложка альбома
+                Section {
+                    if isProcessingVideo {
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                ProgressView()
+                                    .controlSize(.regular)
+                                Text("Конвертация видео (720×720, H.264)…")
+                                    .font(.subheadline)
+                            }
+                            ProgressView(value: videoProcessProgress)
+                                .progressViewStyle(.linear)
+                        }
+                        .padding(.vertical, 8)
+                    } else {
+                        HStack(spacing: 16) {
+                            if let fileName = animatedCoverFileName,
+                               let url = AnimatedCoverManager.shared.coversDirectory.appendingPathComponent(fileName) as URL?,
+                               FileManager.default.fileExists(atPath: url.path) {
+                                MiniAnimatedCoverPreviewView(url: url, cornerRadius: 10, size: 80)
+                                    .shadow(color: .black.opacity(0.15), radius: 6, x: 0, y: 3)
+                            } else {
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .fill(Color(uiColor: .tertiarySystemFill))
+                                    .frame(width: 80, height: 80)
+                                    .overlay(
+                                        Image(systemName: "video.badge.plus")
+                                            .font(.system(size: 26))
+                                            .foregroundStyle(.secondary)
+                                    )
+                            }
+
+                            VStack(alignment: .leading, spacing: 10) {
+                                PhotosPicker(
+                                    selection: $selectedVideoItem,
+                                    matching: .videos,
+                                    photoLibrary: .shared()
+                                ) {
+                                    HStack {
+                                        Image(systemName: "film")
+                                        Text("Выбрать из Фото…")
+                                    }
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                                }
+                                .onChange(of: selectedVideoItem) { newItem in
+                                    guard let item = newItem else { return }
+                                    processVideoFromPhotos(item: item)
+                                }
+
+                                Button {
+                                    showFileImporter = true
+                                } label: {
+                                    HStack {
+                                        Image(systemName: "folder")
+                                        Text("Выбрать файл (MP4, MOV, GIF)…")
+                                    }
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                                }
+
+                                if animatedCoverFileName != nil {
+                                    Button(role: .destructive, action: {
+                                        animatedCoverFileName = nil
+                                        selectedVideoItem = nil
+                                    }) {
+                                        HStack {
+                                            Image(systemName: "trash")
+                                            Text("Удалить видеообложку")
+                                        }
+                                        .font(.subheadline)
+                                        .foregroundStyle(.red)
+                                    }
+                                }
+                            }
+                        }
+                        .padding(.vertical, 4)
+                    }
+
+                    if let error = videoProcessError {
+                        Text(error)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
+
+                    Toggle("Применить видеообложку ко всем трекам", isOn: $applyAnimatedCoverToTracks)
+                } header: {
+                    Text("Анимированная обложка альбома (Apple Music)")
+                } footer: {
+                    Text("Поддерживаются форматы MP4, MOV и GIF. Видео будет автоматически кадрировано в квадрат 720×720 и обрезано до 15 секунд без звука.")
+                }
+
                 // Название и исполнитель альбома
                 Section {
                     VStack(alignment: .leading, spacing: 4) {
@@ -140,8 +242,92 @@ struct EditAlbumView: View {
                         saveChanges()
                         dismiss()
                     }
-                    .disabled(!isTitleValid)
+                    .disabled(!isTitleValid || isProcessingVideo)
                     .fontWeight(.bold)
+                }
+            }
+            .fileImporter(
+                isPresented: $showFileImporter,
+                allowedContentTypes: [.movie, .video, .quickTimeMovie, .mpeg4Movie, .gif],
+                allowsMultipleSelection: false
+            ) { result in
+                switch result {
+                case .success(let urls):
+                    guard let url = urls.first else { return }
+                    processVideoFromFile(url: url)
+                case .failure(let error):
+                    self.videoProcessError = "Ошибка выбора файла: \(error.localizedDescription)"
+                }
+            }
+        }
+    }
+
+    private func processVideoFromPhotos(item: PhotosPickerItem) {
+        isProcessingVideo = true
+        videoProcessProgress = 0.0
+        videoProcessError = nil
+
+        Task {
+            do {
+                guard let movie = try await item.loadTransferable(type: MovieTransferable.self) else {
+                    await MainActor.run {
+                        self.isProcessingVideo = false
+                        self.videoProcessError = "Не удалось загрузить видео из Фото."
+                    }
+                    return
+                }
+
+                let result = try await AnimatedCoverManager.shared.processAndSaveVideo(sourceURL: movie.url) { progress in
+                    Task { @MainActor in
+                        self.videoProcessProgress = progress
+                    }
+                }
+
+                await MainActor.run {
+                    self.animatedCoverFileName = result.fileName
+                    if self.artworkData == nil {
+                        self.artworkData = result.previewImageData
+                    }
+                    self.isProcessingVideo = false
+                }
+            } catch {
+                await MainActor.run {
+                    self.isProcessingVideo = false
+                    self.videoProcessError = "Ошибка обработки видео: \(error.localizedDescription)"
+                }
+            }
+        }
+    }
+
+    private func processVideoFromFile(url: URL) {
+        isProcessingVideo = true
+        videoProcessProgress = 0.0
+        videoProcessError = nil
+
+        Task {
+            let canAccess = url.startAccessingSecurityScopedResource()
+            defer {
+                if canAccess { url.stopAccessingSecurityScopedResource() }
+            }
+
+            do {
+                let result = try await AnimatedCoverManager.shared.processAndSaveVideo(sourceURL: url) { progress in
+                    Task { @MainActor in
+                        self.videoProcessProgress = progress
+                    }
+                }
+
+                await MainActor.run {
+                    self.animatedCoverFileName = result.fileName
+                    if self.artworkData == nil {
+                        self.artworkData = result.previewImageData
+                    }
+                    self.isProcessingVideo = false
+                }
+            } catch {
+                await MainActor.run {
+                    self.isProcessingVideo = false
+                    self.videoProcessError = "Ошибка обработки видео: \(error.localizedDescription)"
                 }
             }
         }
@@ -156,7 +342,9 @@ struct EditAlbumView: View {
             newTitle: cleanTitle.isEmpty ? "Неизвестный альбом" : cleanTitle,
             newArtist: cleanArtist.isEmpty ? "Неизвестный исполнитель" : cleanArtist,
             newArtwork: artworkData,
-            applyToTracks: applyToTracks
+            applyToTracks: applyToTracks,
+            newAnimatedCoverFileName: animatedCoverFileName,
+            applyAnimatedCoverToTracks: applyAnimatedCoverToTracks
         )
     }
 }

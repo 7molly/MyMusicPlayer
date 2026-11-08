@@ -174,48 +174,32 @@ struct ArtworkView: View {
     var placeholderSymbol: String = "music.note"
 
     @State private var loadedImage: UIImage? = nil
-    @State private var currentDataKey: String? = nil
+    @State private var loadedKey: String? = nil
     @ObservedObject private var themeManager = ThemeManager.shared
 
-    init(
-        data: Data?,
-        cornerRadius: CGFloat = 8,
-        targetPixelSize: Int = 120,
-        placeholderBackground: Color? = nil,
-        placeholderSymbolColor: Color? = nil,
-        placeholderSymbol: String = "music.note"
-    ) {
-        self.data = data
-        self.cornerRadius = cornerRadius
-        self.targetPixelSize = targetPixelSize
-        self.placeholderBackground = placeholderBackground
-        self.placeholderSymbolColor = placeholderSymbolColor
-        self.placeholderSymbol = placeholderSymbol
-
-        if let data = data, !data.isEmpty {
-            let key = ArtworkThumbnailCache.shared.cacheKey(for: data, pixelSize: targetPixelSize)
-            let cached = ArtworkThumbnailCache.shared.cachedImage(forKey: key)
-            self._loadedImage = State(initialValue: cached)
-            self._currentDataKey = State(initialValue: key)
-        } else {
-            self._loadedImage = State(initialValue: nil)
-            self._currentDataKey = State(initialValue: nil)
-        }
+    private var currentKey: String? {
+        guard let data = data, !data.isEmpty else { return nil }
+        return ArtworkThumbnailCache.shared.cacheKey(for: data, pixelSize: targetPixelSize)
     }
 
-    private var activeImage: UIImage? {
-        if let data = data, !data.isEmpty {
-            let key = ArtworkThumbnailCache.shared.cacheKey(for: data, pixelSize: targetPixelSize)
-            if let cached = ArtworkThumbnailCache.shared.cachedImage(forKey: key) {
-                return cached
-            }
+    /// Актуальное изображение строго для текущих данных обложки (исключает залипание старых обложек)
+    private var displayImage: UIImage? {
+        guard let key = currentKey else { return nil }
+        // 1. Проверяем синхронный RAM-кэш
+        if let memCached = ArtworkThumbnailCache.shared.cachedImage(forKey: key) {
+            return memCached
         }
-        return loadedImage
+        // 2. Если асинхронно загруженное изображение соответствует именно этому ключу
+        if loadedKey == key {
+            return loadedImage
+        }
+        // Ни в коем случае не возвращаем чужую/старую обложку
+        return nil
     }
 
     var body: some View {
         ZStack {
-            if let image = activeImage {
+            if let image = displayImage {
                 Image(uiImage: image)
                     .resizable()
                     .interpolation(.medium)
@@ -230,38 +214,38 @@ struct ArtworkView: View {
             }
         }
         .onAppear {
-            let expectedKey = data.map { ArtworkThumbnailCache.shared.cacheKey(for: $0, pixelSize: targetPixelSize) }
-            if currentDataKey != expectedKey || activeImage == nil {
-                loadImage(for: data)
-            }
+            requestLoad()
         }
-        .onChange(of: data) { newData in
-            loadImage(for: newData)
+        .onChange(of: data) { _ in
+            requestLoad()
         }
     }
 
-    private func loadImage(for inputData: Data?) {
-        guard let inputData = inputData, !inputData.isEmpty else {
+    private func requestLoad() {
+        guard let inputData = data, !inputData.isEmpty, let key = currentKey else {
             self.loadedImage = nil
-            self.currentDataKey = nil
+            self.loadedKey = nil
             return
         }
 
-        let key = ArtworkThumbnailCache.shared.cacheKey(for: inputData, pixelSize: targetPixelSize)
-        self.currentDataKey = key
-
-        if let cached = ArtworkThumbnailCache.shared.cachedImage(forKey: key) {
-            self.loadedImage = cached
+        // Если уже есть в памяти для этого ключа
+        if let memCached = ArtworkThumbnailCache.shared.cachedImage(forKey: key) {
+            self.loadedImage = memCached
+            self.loadedKey = key
             return
         }
 
-        // Если в памяти нет, сбрасываем отображение старой обложки, чтобы не залипала
-        self.loadedImage = nil
+        // Сбрасываем старую обложку, чтобы она не залипала при смене трека
+        if self.loadedKey != key {
+            self.loadedImage = nil
+            self.loadedKey = key
+        }
 
         ArtworkThumbnailCache.shared.loadThumbnail(data: inputData, pixelSize: targetPixelSize) { [expectedKey = key] img in
-            guard let img = img, self.currentDataKey == expectedKey else { return }
+            guard let img = img, self.currentKey == expectedKey else { return }
             withAnimation(.easeIn(duration: 0.15)) {
                 self.loadedImage = img
+                self.loadedKey = expectedKey
             }
         }
     }

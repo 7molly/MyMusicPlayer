@@ -5,9 +5,11 @@ struct SettingsView: View {
     @EnvironmentObject private var libraryStore: LibraryStore
     @ObservedObject var playerVM = PlayerViewModel.shared
     @ObservedObject private var themeManager = ThemeManager.shared
+    @ObservedObject private var coverManager = AnimatedCoverManager.shared
 
     @State private var diskUsageString: String = "Вычисление…"
     @State private var showClearConfirmation: Bool = false
+    @State private var showClearCoversConfirmation: Bool = false
 
     var body: some View {
         NavigationStack {
@@ -107,6 +109,29 @@ struct SettingsView: View {
                         }
                     }
                     .padding(.vertical, 4)
+                }
+
+                // MARK: - Секция «Анимированные обложки»
+                Section {
+                    Toggle("Анимированные обложки", isOn: $coverManager.isEnabled)
+
+                    HStack {
+                        Label("Занято видеообложками", systemImage: "film.stack")
+                        Spacer()
+                        Text(coverManager.formattedDiskUsage)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Button(role: .destructive, action: {
+                        showClearCoversConfirmation = true
+                    }) {
+                        Label("Очистить видеообложки", systemImage: "trash")
+                    }
+                    .disabled(coverManager.totalDiskUsageBytes == 0)
+                } header: {
+                    Text("Анимированные обложки")
+                } footer: {
+                    Text("Воспроизведение коротких зацикленных видео вместо обложек альбомов. Отключение позволяет экономить заряд аккумулятора.")
                 }
 
                 // MARK: - Секция хранилища
@@ -219,6 +244,18 @@ struct SettingsView: View {
                 Button("Отмена", role: .cancel) {}
             } message: {
                 Text("Все импортированные аудиофайлы и альбомы будут безвозвратно удалены из песочницы приложения.")
+            }
+            .confirmationDialog(
+                "Удалить все видеообложки?",
+                isPresented: $showClearCoversConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("Очистить видеообложки", role: .destructive) {
+                    coverManager.clearAllCovers(in: libraryStore)
+                }
+                Button("Отмена", role: .cancel) {}
+            } message: {
+                Text("Все скачанные и конвертированные видеофайлы обложек будут удалены. Статичные обложки сохранятся.")
             }
         }
     }

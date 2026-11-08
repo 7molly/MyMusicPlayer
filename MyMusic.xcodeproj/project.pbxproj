@@ -11,6 +11,8 @@
 		B10000000000000000000002 /* QueueView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000002 /* QueueView.swift */; };
 		B10000000000000000000003 /* EditTrackView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000003 /* EditTrackView.swift */; };
 		B10000000000000000000004 /* EditAlbumView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000004 /* EditAlbumView.swift */; };
+		B10000000000000000000005 /* AnimatedCoverManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000005 /* AnimatedCoverManager.swift */; };
+		B10000000000000000000006 /* AnimatedCoverPlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000006 /* AnimatedCoverPlayerView.swift */; };
 		121191E430CE4264AEC19B9B /* PlayerViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29EB16290CA44CC7B098DD03 /* PlayerViewModel.swift */; };
 		147DAD85F6C744B386FF81EF /* ArtworkView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E18A5F0A7224D0D855AA0D2 /* ArtworkView.swift */; };
 		18F4DF97760C4D909A3E4843 /* EqualizerViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED6071F61432433D9A5B7C15 /* EqualizerViewModel.swift */; };
@@ -46,6 +48,8 @@
 		A10000000000000000000002 /* QueueView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueView.swift; sourceTree = "<group>"; };
 		A10000000000000000000003 /* EditTrackView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditTrackView.swift; sourceTree = "<group>"; };
 		A10000000000000000000004 /* EditAlbumView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditAlbumView.swift; sourceTree = "<group>"; };
+		A10000000000000000000005 /* AnimatedCoverManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnimatedCoverManager.swift; sourceTree = "<group>"; };
+		A10000000000000000000006 /* AnimatedCoverPlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnimatedCoverPlayerView.swift; sourceTree = "<group>"; };
 		020F8FF37B794F849D6545D3 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		040939BCEC4C498285C01A3B /* FullScreenPlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FullScreenPlayerView.swift; sourceTree = "<group>"; };
 		A10000000000000000000020 /* SpeedAndPitchSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeedAndPitchSheet.swift; sourceTree = "<group>"; };
@@ -121,6 +125,7 @@
 		0FABF91E797D4321B4E0AA3B /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				A10000000000000000000005 /* AnimatedCoverManager.swift */,
 				D01DA1B4EBB64E4386877862 /* AudioEngineManager.swift */,
 				14110B0A8EF94DCBA3F8F1E1 /* ImportService.swift */,
 				ADD5BECACEC2415AA44E124B /* LibraryStore.swift */,
@@ -153,6 +158,7 @@
 			isa = PBXGroup;
 			children = (
 				A10000000000000000000001 /* AirPlayButtonView.swift */,
+				A10000000000000000000006 /* AnimatedCoverPlayerView.swift */,
 				8E18A5F0A7224D0D855AA0D2 /* ArtworkView.swift */,
 				F014C07443BB43B9974D3C63 /* BlurredArtworkBackground.swift */,
 				040939BCEC4C498285C01A3B /* FullScreenPlayerView.swift */,
@@ -331,6 +337,8 @@
 				85BE79FAA438440081C2E3BA /* EQPreset.swift in Sources */,
 				70693C167C0A4627A21852BB /* RepeatMode.swift in Sources */,
 				E4ED7B9DC67C4734A2C806A1 /* Track.swift in Sources */,
+				B10000000000000000000005 /* AnimatedCoverManager.swift in Sources */,
+				B10000000000000000000006 /* AnimatedCoverPlayerView.swift in Sources */,
 				3F50F5DF277443F786F599DA /* AudioEngineManager.swift in Sources */,
 				AB4535B4BCE747C3BF78F10C /* ImportService.swift in Sources */,
 				1BE7AD6F1D184420897E2FF6 /* LibraryStore.swift in Sources */,

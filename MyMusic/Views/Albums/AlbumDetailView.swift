@@ -8,6 +8,8 @@ struct AlbumDetailView: View {
 
     @ObservedObject var playerVM = PlayerViewModel.shared
     @ObservedObject private var themeManager = ThemeManager.shared
+    @ObservedObject private var sheetState = PlayerSheetState.shared
+    @ObservedObject private var coverManager = AnimatedCoverManager.shared
 
     @State private var showEditAlbumSheet: Bool = false
     @State private var trackToEdit: Track? = nil
@@ -32,9 +34,21 @@ struct AlbumDetailView: View {
             VStack(spacing: 20) {
                 // Шапка альбома с обложкой
                 VStack(spacing: 12) {
-                    ArtworkView(data: currentAlbum.resolvedArtworkData, cornerRadius: 16, targetPixelSize: 1000)
-                        .frame(width: 220, height: 220)
-                        .shadow(color: .black.opacity(0.2), radius: 16, x: 0, y: 8)
+                    ZStack {
+                        ArtworkView(data: currentAlbum.resolvedArtworkData, cornerRadius: 16, targetPixelSize: 1000)
+
+                        if let url = currentAlbum.resolvedAnimatedCoverURL,
+                           coverManager.canPlayAnimation,
+                           sheetState.expansion < 0.1 {
+                            AnimatedCoverPlayerView(
+                                url: url,
+                                cornerRadius: 16,
+                                isPlaying: true
+                            )
+                        }
+                    }
+                    .frame(width: 220, height: 220)
+                    .shadow(color: .black.opacity(0.2), radius: 16, x: 0, y: 8)
 
                     Text(currentAlbum.title)
                         .font(.title2)

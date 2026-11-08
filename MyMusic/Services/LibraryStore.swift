@@ -298,7 +298,15 @@ final class LibraryStore: ObservableObject {
     }
 
     // MARK: - Обновление метаданных альбома
-    func updateAlbum(albumID: UUID, newTitle: String, newArtist: String, newArtwork: Data?, applyToTracks: Bool) {
+    func updateAlbum(
+        albumID: UUID,
+        newTitle: String,
+        newArtist: String,
+        newArtwork: Data?,
+        applyToTracks: Bool,
+        newAnimatedCoverFileName: String? = nil,
+        applyAnimatedCoverToTracks: Bool = false
+    ) {
         guard let albumIdx = albums.firstIndex(where: { $0.id == albumID }) else { return }
 
         let trimmedTitle = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -313,6 +321,15 @@ final class LibraryStore: ObservableObject {
             albums[albumIdx].artworkData = artwork
         }
 
+        // Обновление анимированной обложки альбома
+        let oldAnimated = albums[albumIdx].animatedCoverFileName
+        if oldAnimated != newAnimatedCoverFileName {
+            albums[albumIdx].animatedCoverFileName = newAnimatedCoverFileName
+            if let old = oldAnimated {
+                AnimatedCoverManager.shared.deleteCoverFileIfUnused(fileName: old, in: self)
+            }
+        }
+
         if applyToTracks {
             for trackIdx in 0..<albums[albumIdx].tracks.count {
                 albums[albumIdx].tracks[trackIdx].albumName = finalTitle
@@ -320,7 +337,29 @@ final class LibraryStore: ObservableObject {
                 if let artwork = newArtwork {
                     albums[albumIdx].tracks[trackIdx].artworkData = artwork
                 }
+                if applyAnimatedCoverToTracks {
+                    let oldTrackCover = albums[albumIdx].tracks[trackIdx].animatedCoverFileName
+                    albums[albumIdx].tracks[trackIdx].animatedCoverFileName = newAnimatedCoverFileName
+                    if let old = oldTrackCover, old != newAnimatedCoverFileName {
+                        AnimatedCoverManager.shared.deleteCoverFileIfUnused(fileName: old, in: self)
+                    }
+                }
 
+                let trackID = albums[albumIdx].tracks[trackIdx].id
+                if let globalIdx = tracks.firstIndex(where: { $0.id == trackID }) {
+                    tracks[globalIdx] = albums[albumIdx].tracks[trackIdx]
+                    DispatchQueue.main.async {
+                        PlayerViewModel.shared.updateTrackMetadata(self.tracks[globalIdx])
+                    }
+                }
+            }
+        } else if applyAnimatedCoverToTracks {
+            for trackIdx in 0..<albums[albumIdx].tracks.count {
+                let oldTrackCover = albums[albumIdx].tracks[trackIdx].animatedCoverFileName
+                albums[albumIdx].tracks[trackIdx].animatedCoverFileName = newAnimatedCoverFileName
+                if let old = oldTrackCover, old != newAnimatedCoverFileName {
+                    AnimatedCoverManager.shared.deleteCoverFileIfUnused(fileName: old, in: self)
+                }
                 let trackID = albums[albumIdx].tracks[trackIdx].id
                 if let globalIdx = tracks.firstIndex(where: { $0.id == trackID }) {
                     tracks[globalIdx] = albums[albumIdx].tracks[trackIdx]
@@ -356,6 +395,10 @@ final class LibraryStore: ObservableObject {
         let fileURL = docs.appendingPathComponent(track.relativeFilePath)
         try? fileManager.removeItem(at: fileURL)
 
+        if let cover = track.animatedCoverFileName {
+            AnimatedCoverManager.shared.deleteCoverFileIfUnused(fileName: cover, in: self)
+        }
+
         // Удаляем из общего списка
         tracks.removeAll { $0.id == track.id }
 
@@ -382,10 +425,17 @@ final class LibraryStore: ObservableObject {
     func deleteAlbum(_ album: Album) {
         let docs = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
 
+        if let cover = album.animatedCoverFileName {
+            AnimatedCoverManager.shared.deleteCoverFileIfUnused(fileName: cover, in: self)
+        }
+
         // Удаляем аудиофайлы всех треков альбома
         for track in album.tracks {
             let fileURL = docs.appendingPathComponent(track.relativeFilePath)
             try? fileManager.removeItem(at: fileURL)
+            if let cover = track.animatedCoverFileName {
+                AnimatedCoverManager.shared.deleteCoverFileIfUnused(fileName: cover, in: self)
+            }
             tracks.removeAll { $0.id == track.id }
             DispatchQueue.main.async {
                 PlayerViewModel.shared.removeQueueTrack(withID: track.id)
@@ -400,6 +450,8 @@ final class LibraryStore: ObservableObject {
         let docs = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let musicDir = docs.appendingPathComponent("Library/Music", isDirectory: true)
         try? fileManager.removeItem(at: musicDir)
+
+        AnimatedCoverManager.shared.clearAllCovers(in: self)
 
         tracks.removeAll()
         albums.removeAll()
