@@ -69,6 +69,7 @@ struct AlbumDetailView: View {
                 // Кнопки «Слушать» и «Перемешать»
                 HStack(spacing: 16) {
                     Button(action: {
+                        playerVM.logger.info("[AlbumDetailView] Нажатие «Слушать» для альбома '\(currentAlbum.title)'")
                         playerVM.playAlbum(currentAlbum, shuffle: false)
                     }) {
                         HStack {
@@ -84,6 +85,7 @@ struct AlbumDetailView: View {
                     }
 
                     Button(action: {
+                        playerVM.logger.info("[AlbumDetailView] Нажатие «Перемешать» для альбома '\(currentAlbum.title)'")
                         playerVM.playAlbum(currentAlbum, shuffle: true)
                     }) {
                         HStack {
@@ -113,15 +115,8 @@ struct AlbumDetailView: View {
                             isCurrentTrack: playerVM.currentTrack?.id == track.id,
                             isPlaying: playerVM.isPlaying,
                             onPlay: {
-                                if playerVM.currentTrack?.id == track.id {
-                                    if playerVM.isPlaying {
-                                        playerVM.pause()
-                                    } else {
-                                        playerVM.play()
-                                    }
-                                } else {
-                                    playerVM.playAlbum(currentAlbum, startingFrom: track, shuffle: false)
-                                }
+                                playerVM.logger.info("[AlbumDetailView] Тап по треку '\(track.title)', id=\(track.id)")
+                                playerVM.playAlbum(currentAlbum, startingFrom: track, shuffle: false)
                             },
                             onEdit: {
                                 trackToEdit = track

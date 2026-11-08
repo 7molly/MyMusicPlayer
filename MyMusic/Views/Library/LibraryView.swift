@@ -117,7 +117,7 @@ struct LibraryView: View {
                     }
                 }
                 .padding(.horizontal, 16)
-                .padding(.top, 14)
+                .padding(.top, max(PlayerLayoutCalculator.standard.topInset + 4, 18))
                 .padding(.bottom, 6)
 
                 // Верхний ряд управления: кнопка лупы + переключатель «Песни / Плейлисты»
@@ -152,15 +152,21 @@ struct LibraryView: View {
                         .background(Color(uiColor: .secondarySystemFill))
                         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
 
-                        Button("Отмена") {
+                        Button {
                             withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
                                 searchText = ""
                                 isSearchActive = false
                                 isSearchFocused = false
                             }
+                        } label: {
+                            Text("Отмена")
+                                .font(.system(size: 16, weight: .regular))
+                                .foregroundStyle(themeManager.accentColor)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 8)
+                                .contentShape(Rectangle())
                         }
-                        .font(.system(size: 15))
-                        .foregroundStyle(themeManager.accentColor)
+                        .buttonStyle(.plain)
                         .transition(.move(edge: .trailing).combined(with: .opacity))
                     } else {
                         // Кнопка лупы слева
@@ -212,6 +218,8 @@ struct LibraryView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .toolbar(.hidden, for: .navigationBar)
+            .ignoresSafeArea(.keyboard, edges: .bottom)
             .navigationBarTitleDisplayMode(.inline)
             // Модальное окно редактирования трека
             .sheet(item: $trackToEdit) { track in
@@ -297,15 +305,8 @@ struct LibraryView: View {
                             isCurrentTrack: playerVM.currentTrack?.id == track.id,
                             isPlaying: playerVM.isPlaying,
                             onPlay: {
-                                if playerVM.currentTrack?.id == track.id {
-                                    if playerVM.isPlaying {
-                                        playerVM.pause()
-                                    } else {
-                                        playerVM.play()
-                                    }
-                                } else {
-                                    playerVM.playTrack(track, in: filteredTracks)
-                                }
+                                playerVM.logger.info("[LibraryView] Тап по треку '\(track.title)', id=\(track.id)")
+                                playerVM.playTrack(track, in: filteredTracks)
                             },
                             onEdit: {
                                 trackToEdit = track
@@ -419,12 +420,14 @@ struct LibraryView: View {
                         }
 
                         Button {
+                            playerVM.logger.info("[LibraryView] Меню плейлиста «Слушать» '\(playlist.title)'")
                             playerVM.playPlaylist(playlist, in: libraryStore, shuffle: false)
                         } label: {
                             Label("Слушать", systemImage: "play.fill")
                         }
 
                         Button {
+                            playerVM.logger.info("[LibraryView] Меню плейлиста «Перемешать» '\(playlist.title)'")
                             playerVM.playPlaylist(playlist, in: libraryStore, shuffle: true)
                         } label: {
                             Label("Перемешать", systemImage: "shuffle")
@@ -852,6 +855,7 @@ struct PlaylistDetailView: View {
                     if !tracks.isEmpty {
                         HStack(spacing: 14) {
                             Button {
+                                playerVM.logger.info("[LibraryView] Детали плейлиста «Слушать» '\(currentPlaylist.title)'")
                                 playerVM.playPlaylist(currentPlaylist, in: libraryStore, shuffle: false)
                             } label: {
                                 HStack(spacing: 8) {
@@ -867,6 +871,7 @@ struct PlaylistDetailView: View {
                             }
 
                             Button {
+                                playerVM.logger.info("[LibraryView] Детали плейлиста «Перемешать» '\(currentPlaylist.title)'")
                                 playerVM.playPlaylist(currentPlaylist, in: libraryStore, shuffle: true)
                             } label: {
                                 HStack(spacing: 8) {

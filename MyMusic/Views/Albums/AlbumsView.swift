@@ -56,12 +56,14 @@ struct AlbumsView: View {
                             .buttonStyle(.plain)
                             .contextMenu {
                                 Button(action: {
+                                    playerVM.logger.info("[AlbumsView] Контекстное меню «Слушать» для альбома '\(album.title)'")
                                     playerVM.playAlbum(album, shuffle: false)
                                 }) {
                                     Label("Слушать", systemImage: "play.fill")
                                 }
 
                                 Button(action: {
+                                    playerVM.logger.info("[AlbumsView] Контекстное меню «Перемешать» для альбома '\(album.title)'")
                                     playerVM.playAlbum(album, shuffle: true)
                                 }) {
                                     Label("Перемешать", systemImage: "shuffle")

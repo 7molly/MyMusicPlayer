@@ -351,15 +351,17 @@ final class AudioEngineManager: NSObject, ObservableObject {
         // 1. Инкрементируем поколение, чтобы инвалидировать любые устаревшие completion-обработчики
         currentGeneration += 1
         let gen = currentGeneration
-        logger.info("[AudioEngine.prepare] Старт подготовки gen=\(gen), file=\(url.lastPathComponent), pos=\(startPosition)s")
+        logger.info("[AudioEngine.prepare] Старт подготовки gen=\(gen), file=\(url.lastPathComponent), path=\(url.path), pos=\(startPosition)s")
 
         // 2. Останавливаем playerNode перед сменой трека и планированием нового буфера
         if playerNode.isPlaying {
             playerNode.stop()
-        } else {
-            playerNode.reset()
         }
+        playerNode.reset()
         stopTimer()
+
+        // Сбрасываем старый файл перед открытием нового, освобождая дескриптор и файловый замок
+        self.currentAudioFile = nil
 
         // 3. Активируем аудиосессию
         try activateAudioSession()

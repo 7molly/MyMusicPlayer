@@ -34,7 +34,7 @@ final class PlayerViewModel: ObservableObject {
 
     private let audioEngine = AudioEngineManager.shared
     private let nowPlaying = NowPlayingManager.shared
-    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "com.timuraliev.mymusic", category: "PlayerViewModel")
+    let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "com.timuraliev.mymusic", category: "PlayerViewModel")
     private var cancellables = Set<AnyCancellable>()
 
     // MARK: - Состояние воспроизведения
@@ -178,20 +178,27 @@ final class PlayerViewModel: ObservableObject {
         startPosition: TimeInterval = 0.0,
         autoPlay: Bool = true
     ) {
-        logger.info("[PlayerVM.play(track:)] Запрос трека: '\(track.title)', index: \(String(describing: index)), autoPlay: \(autoPlay), queueCount: \(self.queue.count)")
+        logger.info("[PlayerVM.play(track:)] Запрос трека: '\(track.title)', id=\(track.id), currentID=\(self.currentTrack?.id.uuidString ?? "nil"), index: \(String(describing: index)), autoPlay: \(autoPlay), queueCount: \(self.queue.count)")
 
         // 1. Проверяем наличие файла на диске. Если файл отсутствует — переходим к следующему
         guard let fileURL = track.resolvedFileURL() else {
-            logger.error("[PlayerVM.play(track:)] Файл трека не найден на диске: \(track.relativeFilePath). Пропуск трека.")
+            logger.error("[PlayerVM.play(track:)] Файл трека не найден на диске: relativePath='\(track.relativeFilePath)', id=\(track.id). Пропуск трека.")
             handleMissingTrack(track, at: index)
             return
         }
 
-        // 2. Актуализируем индекс в очереди
-        if let idx = index, idx >= 0 && idx < queue.count {
+        // 2. Актуализируем очередь и индекс воспроизведения
+        if let idx = index, idx >= 0 && idx < queue.count, queue[idx].id == track.id {
             self.currentIndex = idx
         } else if let foundIdx = queue.firstIndex(where: { $0.id == track.id }) {
             self.currentIndex = foundIdx
+        } else {
+            // Трек отсутствует в текущей очереди (например, тап по только что импортированному треку):
+            // Гарантированно перезаписываем очередь и сбрасываем индекс в 0, чтобы старая очередь не продолжала играть
+            logger.info("[PlayerVM.play(track:)] Трек отсутствует в текущей очереди -> обновляем очередь на [\(track.title)]")
+            self.originalQueue = [track]
+            self.queue = [track]
+            self.currentIndex = 0
         }
 
         // 3. Синхронно обновляем текущий трек и прогресс
@@ -204,7 +211,11 @@ final class PlayerViewModel: ObservableObject {
         // 4. Предпрогрев миниатюр и фоновых цветов обложки
         prewarmArtworkAndColors(for: track)
 
-        // 5. Подготовка аудиодвижка и запуск
+        // 5. Остановка предыдущего воспроизведения и подготовка аудиодвижка
+        if audioEngine.isPlaying {
+            audioEngine.stop()
+        }
+
         do {
             try audioEngine.prepare(url: fileURL, startPosition: startPosition)
             if autoPlay {
@@ -224,6 +235,7 @@ final class PlayerViewModel: ObservableObject {
 
     private func handleMissingTrack(_ track: Track, at index: Int?) {
         guard !queue.isEmpty else {
+            logger.warning("[PlayerVM.handleMissingTrack] Очередь пуста, остановка плеера")
             stop()
             currentTrack = nil
             return
@@ -231,10 +243,10 @@ final class PlayerViewModel: ObservableObject {
         let nextIdx = (index ?? currentIndex) + 1
         if nextIdx < queue.count {
             self.currentIndex = nextIdx
-            logger.info("[PlayerVM.handleMissingTrack] Пропуск битого трека -> переходим к индексу \(nextIdx)")
+            logger.info("[PlayerVM.handleMissingTrack] Пропуск битого трека -> переходим к индексу \(nextIdx) (\(self.queue[nextIdx].title))")
             play(track: queue[nextIdx], at: nextIdx, startPosition: 0.0, autoPlay: true)
         } else {
-            logger.info("[PlayerVM.handleMissingTrack] Битый трек был последним, остановка")
+            logger.info("[PlayerVM.handleMissingTrack] Битый трек был последним в очереди, остановка")
             stop()
         }
     }
@@ -243,6 +255,7 @@ final class PlayerViewModel: ObservableObject {
     func playTrack(_ track: Track, in contextQueue: [Track] = []) {
         hapticFeedback()
         let resolvedQueue = contextQueue.isEmpty ? [track] : contextQueue
+        logger.info("[PlayerVM.playTrack] Запрос воспроизведения '\(track.title)', id=\(track.id), contextQueue: \(resolvedQueue.count) треков")
         self.originalQueue = resolvedQueue
 
         if isShuffleEnabled {
@@ -260,13 +273,17 @@ final class PlayerViewModel: ObservableObject {
     }
 
     func playAlbum(_ album: Album, startingFrom track: Track? = nil, shuffle: Bool = false) {
+        logger.info("[PlayerVM.playAlbum] Запрос альбома '\(album.title)', треков в альбоме: \(album.tracks.count), shuffle: \(shuffle)")
         let sortedTracks = album.tracks.sorted {
             if $0.trackNumber != $1.trackNumber {
                 return $0.trackNumber < $1.trackNumber
             }
             return $0.title < $1.title
         }
-        guard !sortedTracks.isEmpty else { return }
+        guard !sortedTracks.isEmpty else {
+            logger.warning("[PlayerVM.playAlbum] Альбом '\(album.title)' не содержит треков, отмена")
+            return
+        }
 
         self.isShuffleEnabled = shuffle
         let first = track ?? (shuffle ? sortedTracks.randomElement()! : sortedTracks.first!)
@@ -274,8 +291,12 @@ final class PlayerViewModel: ObservableObject {
     }
 
     func playPlaylist(_ playlist: Playlist, startingFrom track: Track? = nil, in store: LibraryStore, shuffle: Bool = false) {
+        logger.info("[PlayerVM.playPlaylist] Запрос плейлиста '\(playlist.title)', trackIDs: \(playlist.trackIDs.count), shuffle: \(shuffle)")
         let tracks = playlist.resolvedTracks(in: store)
-        guard !tracks.isEmpty else { return }
+        guard !tracks.isEmpty else {
+            logger.warning("[PlayerVM.playPlaylist] Плейлист '\(playlist.title)' пуст или треки еще не синхронизированы в LibraryStore (\(playlist.trackIDs.count) IDs)")
+            return
+        }
 
         self.isShuffleEnabled = shuffle
         let first = track ?? (shuffle ? tracks.randomElement()! : tracks.first!)

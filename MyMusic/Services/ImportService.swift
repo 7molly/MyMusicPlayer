@@ -11,6 +11,17 @@ enum ImportPickerMode {
     case folder
 }
 
+/// Очистка строки для использования в качестве имени папки или файла
+func sanitizeFileName(_ name: String) -> String {
+    let invalidCharacters = CharacterSet(charactersIn: "\\/:*?\"<>|")
+        .union(.newlines)
+        .union(.controlCharacters)
+    var cleaned = name.components(separatedBy: invalidCharacters).joined(separator: " ")
+    cleaned = cleaned.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+    cleaned = cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
+    return cleaned.isEmpty ? "Untitled" : cleaned
+}
+
 // MARK: - Нативный координатор DocumentPicker (iOS 16+)
 @MainActor
 final class DocumentPickerPresenter: NSObject, UIDocumentPickerDelegate {
@@ -299,8 +310,17 @@ final class ImportService: ObservableObject {
             try fileManager.createDirectory(at: musicDir, withIntermediateDirectories: true)
         }
 
-        let uniqueFileName = "\(UUID().uuidString.prefix(8))_\(sourceURL.lastPathComponent)"
-        let destinationURL = musicDir.appendingPathComponent(uniqueFileName)
+        let trackID = UUID()
+        let trackDir = musicDir.appendingPathComponent(trackID.uuidString, isDirectory: true)
+
+        if !fileManager.fileExists(atPath: trackDir.path) {
+            try fileManager.createDirectory(at: trackDir, withIntermediateDirectories: true)
+        }
+
+        let ext = sourceURL.pathExtension.isEmpty ? "mp3" : sourceURL.pathExtension.lowercased()
+        let safeName = sanitizeFileName(sourceURL.deletingPathExtension().lastPathComponent)
+        let uniqueFileName = "\(safeName).\(ext)"
+        let destinationURL = trackDir.appendingPathComponent(uniqueFileName)
 
         // Копирование файла в sandbox приложения
         var didCopy = false
@@ -333,7 +353,7 @@ final class ImportService: ObservableObject {
 
         guard didCopy else { return nil }
 
-        let relativePath = "Library/Music/\(uniqueFileName)"
+        let relativePath = "Library/Music/\(trackID.uuidString)/\(uniqueFileName)"
 
         // Извлечение метаданных через AVURLAsset
         let asset = AVURLAsset(url: destinationURL)
@@ -378,6 +398,7 @@ final class ImportService: ObservableObject {
         let finalAlbum = (albumName?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false) ? albumName! : "Неизвестный альбом"
 
         let track = Track(
+            id: trackID,
             title: finalTitle,
             artist: finalArtist,
             albumName: finalAlbum,
@@ -479,13 +500,7 @@ final class SoundCloudDownloader: ObservableObject {
 
     /// Очистка строки для использования в качестве имени папки или файла
     func sanitizeName(_ name: String) -> String {
-        let invalidCharacters = CharacterSet(charactersIn: "\\/:*?\"<>|")
-            .union(.newlines)
-            .union(.controlCharacters)
-        var cleaned = name.components(separatedBy: invalidCharacters).joined(separator: " ")
-        cleaned = cleaned.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
-        cleaned = cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
-        return cleaned.isEmpty ? "Untitled" : cleaned
+        sanitizeFileName(name)
     }
 
     /// Извлечение актуального client_id или fallback
@@ -889,11 +904,11 @@ final class SoundCloudDownloader: ObservableObject {
             throw NSError(domain: "SoundCloud", code: 4, userInfo: [NSLocalizedDescriptionKey: "Не удалось получить аудиопотоки треков из альбома."])
         }
 
-        // 1. Создание отдельной папки на диске с названием альбома!
+        // 1. Создание отдельной изолированной папки на диске с уникальным UUID альбома
         let fileManager = FileManager.default
         let docs = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        let safeAlbumFolderName = sanitizeName(albumTitle)
-        let albumDir = docs.appendingPathComponent("Library/Music/\(safeAlbumFolderName)", isDirectory: true)
+        let albumFolderID = UUID().uuidString
+        let albumDir = docs.appendingPathComponent("Library/Music/\(albumFolderID)", isDirectory: true)
         if !fileManager.fileExists(atPath: albumDir.path) {
             try fileManager.createDirectory(at: albumDir, withIntermediateDirectories: true)
         }
@@ -903,6 +918,7 @@ final class SoundCloudDownloader: ObservableObject {
 
         // 2. Скачивание всех треков альбома в эту папку
         for (index, tDict) in allTrackDicts.enumerated() {
+            let trackID = UUID()
             let trackTitle = (tDict["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "Track \(index + 1)"
             let tUser = tDict["user"] as? [String: Any]
             let trackArtist = (tUser?["username"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? albumArtist
@@ -927,7 +943,7 @@ final class SoundCloudDownloader: ObservableObject {
 
                 try audioData.write(to: destinationURL, options: .atomic)
 
-                let relativePath = "Library/Music/\(safeAlbumFolderName)/\(fileName)"
+                let relativePath = "Library/Music/\(albumFolderID)/\(fileName)"
                 let bookmarkData = try? destinationURL.bookmarkData(options: .minimalBookmark)
 
                 var finalDuration = fallbackDur
@@ -946,6 +962,7 @@ final class SoundCloudDownloader: ObservableObject {
                 }
 
                 let track = Track(
+                    id: trackID,
                     title: trackTitle,
                     artist: trackArtist,
                     albumName: albumTitle,
@@ -986,7 +1003,7 @@ final class SoundCloudDownloader: ObservableObject {
         }
 
         progress = 1.0
-        statusMessage = "Альбом «\(albumTitle)» загружен! Сохранено \(downloadedTracks.count) треков в папку «\(safeAlbumFolderName)» и создан плейлист."
+        statusMessage = "Альбом «\(albumTitle)» загружен! Сохранено \(downloadedTracks.count) треков и создан плейлист."
         lastImportedPlaylist = playlist
         lastImportedTracksCount = downloadedTracks.count
         isDownloading = false
@@ -1033,22 +1050,22 @@ final class SoundCloudDownloader: ObservableObject {
         progress = 0.92
         statusMessage = "Сохранение трека в папку альбома..."
 
-        // Создаём отдельную папку с названием альбома на диске
+        // Создаём отдельную изолированную папку трека с уникальным UUID
         let fileManager = FileManager.default
         let docs = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        let safeAlbumFolderName = sanitizeName(albumTitle)
-        let albumDir = docs.appendingPathComponent("Library/Music/\(safeAlbumFolderName)", isDirectory: true)
-        if !fileManager.fileExists(atPath: albumDir.path) {
-            try fileManager.createDirectory(at: albumDir, withIntermediateDirectories: true)
+        let trackID = UUID()
+        let trackDir = docs.appendingPathComponent("Library/Music/\(trackID.uuidString)", isDirectory: true)
+        if !fileManager.fileExists(atPath: trackDir.path) {
+            try fileManager.createDirectory(at: trackDir, withIntermediateDirectories: true)
         }
 
         let safeTitle = sanitizeName(title)
         let fileName = "\(safeTitle).\(fileExtension)"
-        let destinationURL = albumDir.appendingPathComponent(fileName)
+        let destinationURL = trackDir.appendingPathComponent(fileName)
 
         try audioData.write(to: destinationURL, options: .atomic)
 
-        let relativePath = "Library/Music/\(safeAlbumFolderName)/\(fileName)"
+        let relativePath = "Library/Music/\(trackID.uuidString)/\(fileName)"
         let bookmarkData = try? destinationURL.bookmarkData(options: .minimalBookmark)
 
         var finalDuration = fallbackDuration
@@ -1058,6 +1075,7 @@ final class SoundCloudDownloader: ObservableObject {
         }
 
         let track = Track(
+            id: trackID,
             title: title,
             artist: artist,
             albumName: albumTitle,
@@ -1074,7 +1092,7 @@ final class SoundCloudDownloader: ObservableObject {
         }
 
         progress = 1.0
-        statusMessage = "Трек успешно импортирован! Сохранён в папку «\(safeAlbumFolderName)»."
+        statusMessage = "Трек «\(title)» успешно импортирован!"
         lastImportedTrack = track
         isDownloading = false
 
@@ -1311,6 +1329,7 @@ struct SoundCloudImportSheet: View {
                             .clipShape(RoundedRectangle(cornerRadius: 12))
 
                             Button {
+                                playerVM.logger.info("[SoundCloud] Нажатие «Слушать альбом» для '\(playlist.title)', треков: \(playlist.trackIDs.count)")
                                 playerVM.playPlaylist(playlist, in: libraryStore)
                                 dismiss()
                             } label: {
@@ -1369,6 +1388,7 @@ struct SoundCloudImportSheet: View {
                             .clipShape(RoundedRectangle(cornerRadius: 12))
 
                             Button {
+                                playerVM.logger.info("[SoundCloud] Нажатие «Слушать сейчас» для '\(track.title)', id=\(track.id)")
                                 playerVM.playTrack(track)
                                 dismiss()
                             } label: {
