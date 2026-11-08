@@ -1,0 +1,29 @@
+# Xcode
+xcuserdata/
+*.xcworkspace/xcuserdata/
+*.xcuserdatad
+
+build/
+DerivedData/
+*.moved-aside
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+*.hmap
+*.xccheckout
+*.xcscmblueprint
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# Local test videos and frame extracts
+*.MP4
+*.mp4
+open_*.png
+frame_*.png
